@@ -268,6 +268,6 @@ class AttentionForTwoWayAttentionBlock(nn.Module):
             attn = torch.softmax(attn, dim=-1)
             # Get output
             out = attn @ v
-            out = self._recombine_heads(out)
+        out = self._recombine_heads(out)
         out = self.out_proj(out)
         return out

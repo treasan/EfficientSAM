@@ -82,6 +82,7 @@ class Attention(nn.Module):
         )
         if self.use_torch_sdpa:
             x = F.scaled_dot_product_attention(q, k, v, scale=self.scale)
+            x = x.transpose(1, 2).reshape(B, N, C)
         else:
             attn = (q @ k.transpose(-2, -1)) * self.scale
             attn = attn.softmax(dim=-1)
