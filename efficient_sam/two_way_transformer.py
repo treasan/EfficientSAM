@@ -2,6 +2,7 @@ import math
 from typing import Tuple, Type
 import torch
 from torch import nn, Tensor
+import torch.nn.functional as F
 from .mlp import MLPBlock
 
 
@@ -215,6 +216,9 @@ class AttentionForTwoWayAttentionBlock(nn.Module):
         self.k_proj = nn.Linear(embedding_dim, self.internal_dim)
         self.v_proj = nn.Linear(embedding_dim, self.internal_dim)
         self.out_proj = nn.Linear(self.internal_dim, embedding_dim)
+
+        self.use_torch_sdpa = hasattr(F, 'scaled_dot_product_attention')
+
         self._reset_parameters()
 
     def _reset_parameters(self) -> None:
@@ -255,12 +259,15 @@ class AttentionForTwoWayAttentionBlock(nn.Module):
         v = self._separate_heads(v, self.num_heads)
 
         # Attention
-        _, _, _, c_per_head = q.shape
-        attn = q @ k.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
-        attn = attn * self.inv_sqrt_c_per_head
-        attn = torch.softmax(attn, dim=-1)
-        # Get output
-        out = attn @ v
-        out = self._recombine_heads(out)
+        if self.use_torch_sdpa:
+            out = F.scaled_dot_product_attention(q, k, v, scale=self.inv_sqrt_c_per_head)
+        else:
+            _, _, _, c_per_head = q.shape
+            attn = q @ k.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
+            attn = attn * self.inv_sqrt_c_per_head
+            attn = torch.softmax(attn, dim=-1)
+            # Get output
+            out = attn @ v
+            out = self._recombine_heads(out)
         out = self.out_proj(out)
         return out

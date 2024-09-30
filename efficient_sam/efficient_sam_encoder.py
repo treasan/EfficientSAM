@@ -66,6 +66,7 @@ class Attention(nn.Module):
         self.scale = qk_scale or head_dim**-0.5
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.proj = nn.Linear(dim, dim)
+        self.use_torch_sdpa = hasattr(F, 'scaled_dot_product_attention')
 
     def forward(self, x):
         B, N, C = x.shape
@@ -79,9 +80,12 @@ class Attention(nn.Module):
             qkv[1],
             qkv[2],
         )
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        if self.use_torch_sdpa:
+            x = F.scaled_dot_product_attention(q, k, v, scale=self.scale)
+        else:
+            attn = (q @ k.transpose(-2, -1)) * self.scale
+            attn = attn.softmax(dim=-1)
+            x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         return x
 
